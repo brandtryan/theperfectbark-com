@@ -1,0 +1,160 @@
+@font-face {
+	font-family: Ikarus;
+	src: url("./Ikarus.woff2") format("woff2-variations");
+	font-display: auto;
+	unicode-range: u+00-7f, u+2014;
+}
+
+@property --wght {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 300;
+}
+
+@property --wdth {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 100;
+}
+
+@property --ital {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@property --cont {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+:root {
+	font-family: Ikarus, system-ui;
+	font-size: clamp(16px, 1.1vw + 11px, 20px);
+	font-kerning: none;
+	font-synthesis: none;
+	--page-height: 95vh;
+	--line-count: 20;
+}
+
+body {
+	background-color: #1a1a1a;
+	color: #d1d1d1;
+	margin: 0;
+	padding: 0;
+	overflow: hidden; /* Prevent double scrollbars */
+}
+
+/* Container for the snapping scroll */
+#app {
+	height: 100vh;
+	overflow-y: scroll;
+	scroll-snap-type: y mandatory;
+	scroll-behavior: smooth;
+}
+
+#book {
+	max-width: 550px; /* Constrains the "responsive" width */
+	margin: 0 auto;
+	padding: 5vh 1rem;
+}
+
+/* The Page as a strict Grid */
+.page {
+	height: var(--page-height);
+	display: grid;
+	/* 20 equal rows for the lines */
+	grid-template-rows: repeat(var(--line-count), 1fr);
+	grid-template-columns: 1fr;
+	scroll-snap-align: center;
+	scroll-snap-stop: always;
+	align-content: center;
+	justify-content: center;
+	margin-bottom: 10vh; /* Visual gap between pages */
+	background: #2a2a2a;
+	padding: 2rem;
+	border-radius: 8px;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+	box-sizing: border-box;
+	contain: strict;
+	position: relative;
+	backface-visibility: hidden;
+	transform: translateZ(0);
+}
+
+/* Using Line-Based Positioning */
+.line {
+	display: flex;
+	align-items: center;
+	white-space: pre; /* Force non-wrapping */
+	text-wrap: nowrap;
+	overflow: hidden; /* Safety for fixed layout */
+	line-height: clamp(1.2em, 1.25em + 0.51vw, 1.3em);
+	contain: layout paint style;
+	backface-visibility: hidden;
+	transform: translateZ(0);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.03); /* Visual guide */
+}
+
+.word {
+	margin-right: 0.35em;
+	display: inline-block !important;
+	font-variation-settings:
+		"wght" var(--wght),
+		"wdth" var(--wdth),
+		"ital" var(--ital),
+		"cont" var(--cont);
+	overflow: visible;
+	vertical-align: top;
+	transform: translateZ(0);
+	backface-visibility: hidden;
+}
+
+.word.frozen {
+	contain: layout style !important;
+}
+
+.page-number {
+	position: absolute;
+	bottom: 1rem;
+	right: 1rem;
+	font-size: 0.75rem;
+	opacity: 0.5;
+}
+
+#troubleshooting-ui {
+	position: fixed;
+	bottom: 10px;
+	left: 10px;
+	background: rgba(11, 19, 27, 0.85);
+	padding: 10px 15px;
+	border: 1px solid rgba(104, 144, 238, 0.3);
+	border-radius: 6px;
+	font-family: monospace;
+	color: #58a6ff;
+	z-index: 100;
+	pointer-events: none;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Specific line positioning.
+	Since you know exactly which words are on which line,
+	you can even target lines specifically for "hanging" indents
+	or dialogue without affecting the rest of the grid.
+*/
+.line:nth-child(1) {
+	grid-row: 1;
+}
+.line:nth-child(2) {
+	grid-row: 2;
+}
+/* ... up to 20 ... */
+/* Hide scrollbar for a cleaner book feel */
+#app::-webkit-scrollbar {
+	display: none;
+}
+#app {
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+}
