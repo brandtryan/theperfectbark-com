@@ -55,7 +55,7 @@ function removeLoginScreen() {
 	if (container) container.remove();
 }
 
-function startApp() {
+async function startApp() {
 	console.log("Running thi.ng code...");
 
 	// ==========================================
