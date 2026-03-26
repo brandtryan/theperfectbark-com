@@ -1,5 +1,5 @@
 import { onAuthStateChanged, signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "./firebase";
+import { auth, googleProvider } from "./firebase-config";
 import { defAtom } from "@thi.ng/atom";
 import { div } from "@thi.ng/hiccup-html";
 import { $compile } from "@thi.ng/rdom";
