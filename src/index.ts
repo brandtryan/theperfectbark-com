@@ -1,7 +1,7 @@
 import { defAtom } from "@thi.ng/atom";
 import { div } from "@thi.ng/hiccup-html";
 import { $compile } from "@thi.ng/rdom";
-import { debounce, fromDOMEvent, fromRAF } from "@thi.ng/rstream";
+import { fromRAF } from "@thi.ng/rstream";
 import { initGraph } from "@thi.ng/rstream-graph";
 import { Pane } from "tweakpane";
 import { ecs, STATE, REST } from "./memory";
@@ -47,7 +47,7 @@ const vh = window.innerHeight;
 // Track mouse globally for the SDF
 let mouseX = 0.5;
 let mouseY = 0.5;
-window.addEventListener("mousemove", (e) => {
+window.addEventListener("mousemove", e => {
 	mouseX = e.clientX / vw;
 	mouseY = 1.0 - e.clientY / vh; // Invert Y for WebGL math
 });
@@ -58,12 +58,9 @@ let WORD_COUNT: number = 0;
  * DOM SETUP
  *********************/
 const sortedPages = Object.keys(Content)
-	.filter((key) => key.startsWith("page"))
-	.sort(
-		(a, b) =>
-			parseInt(a.replace("page", "")) - parseInt(b.replace("page", ""))
-	)
-	.map((key) => Content[key as keyof typeof Content]);
+	.filter(key => key.startsWith("page"))
+	.sort((a, b) => parseInt(a.replace("page", "")) - parseInt(b.replace("page", "")))
+	.map(key => Content[key as keyof typeof Content]);
 
 // ---> REMOVE THIS LOOP? <---
 // This dynamically adds {"data-page-index": 0, ...} to each section's attributes
@@ -80,9 +77,7 @@ const gl = canvas.getContext("webgl2")!;
 if (!gl) throw new Error("WebGL2 not supported!");
 
 if (!gl.getExtension("EXT_color_buffer_float")) {
-	console.error(
-		"EXT_color_buffer_float not supported! Falling back to WebGL 2 defaults."
-	);
+	console.error("EXT_color_buffer_float not supported! Falling back to WebGL 2 defaults.");
 }
 await document.fonts.ready;
 $compile(book).mount(document.getElementById("app")!);
@@ -95,9 +90,7 @@ const domNodes = Array.from(document.getElementsByClassName("word"));
 WORD_COUNT = domNodes.length;
 ecs.setCapacity(WORD_COUNT);
 
-const rootFontSize = parseFloat(
-	window.getComputedStyle(document.documentElement).fontSize
-);
+const rootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize);
 
 const wordsByPage: Record<number, number[]> = {};
 
@@ -115,20 +108,13 @@ for (let i = 0; i < WORD_COUNT; i++) {
 	const norm_y = 1.0 - (y % vh) / vh;
 
 	const parentPage = el.closest(".page");
-	const pIndex = parentPage
-		? parseInt(parentPage.getAttribute("data-page-index")!)
-		: 0;
+	const pIndex = parentPage ? parseInt(parentPage.getAttribute("data-page-index")!) : 0;
 
 	if (!wordsByPage[pIndex]) wordsByPage[pIndex] = [];
 	wordsByPage[pIndex].push(i);
 
 	const entity = ecs.defEntity([STATE, REST]);
-	STATE.set(entity, [
-		CONFIG.restWght,
-		CONFIG.restWdth,
-		CONFIG.restItal,
-		CONFIG.restCont,
-	]);
+	STATE.set(entity, [CONFIG.restWght, CONFIG.restWdth, CONFIG.restItal, CONFIG.restCont]);
 
 	REST.set(entity, [norm_x, norm_y]);
 	// PAGE.set(entity, [pIndex]);
@@ -136,19 +122,16 @@ for (let i = 0; i < WORD_COUNT; i++) {
 
 let activePageIndex = 0;
 const observer = new IntersectionObserver(
-	(entries) => {
-		entries.forEach((entry) => {
+	entries => {
+		entries.forEach(entry => {
 			if (entry.isIntersecting) {
-				activePageIndex = parseInt(
-					entry.target.getAttribute("data-page-index")!,
-					10
-				);
+				activePageIndex = parseInt(entry.target.getAttribute("data-page-index")!, 10);
 			}
 		});
 	},
-	{ root: document.getElementById("app"), threshold: 0.5 }
+	{ root: document.getElementById("app"), threshold: 0.5 },
 );
-document.querySelectorAll(".page").forEach((sec) => observer.observe(sec));
+document.querySelectorAll(".page").forEach(sec => observer.observe(sec));
 
 // ==========================================
 // THE COMPUTE SHADER (FBM + SDF)
@@ -290,11 +273,7 @@ function compileShader(type: any, source: any) {
 const program = gl.createProgram()!;
 gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vsSource));
 gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fsSource));
-gl.transformFeedbackVaryings(
-	program,
-	["v_newParticleData"],
-	gl.SEPARATE_ATTRIBS
-);
+gl.transformFeedbackVaryings(program, ["v_newParticleData"], gl.SEPARATE_ATTRIBS);
 gl.linkProgram(program);
 
 // Bind Uniforms
@@ -365,8 +344,8 @@ const fpsTextNode = tsUI.firstChild!;
 
 initGraph(db, {
 	gpuNode: {
-		fn: (inputs) =>
-			inputs.raf.map((now) => {
+		fn: inputs =>
+			inputs.raf.map(now => {
 				const currentTime = performance.now();
 				frameCount++;
 				if (currentTime >= lastTime + 1000) {
@@ -379,16 +358,9 @@ initGraph(db, {
 
 				if (currentFence) {
 					const status = gl.clientWaitSync(currentFence, 0, 0);
-					if (
-						status === gl.ALREADY_SIGNALED ||
-						status === gl.CONDITION_SATISFIED
-					) {
+					if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) {
 						gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
-						gl.getBufferSubData(
-							gl.PIXEL_PACK_BUFFER,
-							0,
-							STATE.vals
-						);
+						gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, STATE.vals);
 						gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
 						gl.deleteSync(currentFence);
 						currentFence = null!;
@@ -415,11 +387,7 @@ initGraph(db, {
 					gl.uniform1f(locs.noiseSpeed, PARAMS.noiseSpeed);
 
 					gl.bindVertexArray(activeVAO);
-					gl.bindBufferBase(
-						gl.TRANSFORM_FEEDBACK_BUFFER,
-						0,
-						outputBuffer
-					);
+					gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, outputBuffer);
 
 					gl.enable(gl.RASTERIZER_DISCARD);
 					gl.beginTransformFeedback(gl.POINTS);
@@ -432,20 +400,11 @@ initGraph(db, {
 
 					gl.bindBuffer(gl.COPY_READ_BUFFER, outputBuffer);
 					gl.bindBuffer(gl.COPY_WRITE_BUFFER, pbo);
-					gl.copyBufferSubData(
-						gl.COPY_READ_BUFFER,
-						gl.COPY_WRITE_BUFFER,
-						0,
-						0,
-						STATE.vals.byteLength
-					);
+					gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, 0, 0, STATE.vals.byteLength);
 					gl.bindBuffer(gl.COPY_READ_BUFFER, null);
 					gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
 					// @ts-ignore
-					currentFence = gl.fenceSync(
-						gl.SYNC_GPU_COMMANDS_COMPLETE,
-						0
-					);
+					currentFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
 					gl.flush();
 					readIndex = writeIndex;
 				}
@@ -455,9 +414,9 @@ initGraph(db, {
 	},
 
 	uiNode: {
-		fn: (inputs) =>
+		fn: inputs =>
 			inputs.gpu.subscribe({
-				next: (ecsData) => {
+				next: ecsData => {
 					if (!ecsData) return;
 					const activeIndices = wordsByPage[activePageIndex] || [];
 
@@ -472,12 +431,9 @@ initGraph(db, {
 
 						// THE GOLDEN RATIO FIX: CPU Snap-to-Rest
 						// Completely kills the invisible "tail" of exponential decay
-						if (Math.abs(wght - CONFIG.restWght) < 5)
-							wght = CONFIG.restWght;
-						if (Math.abs(wdth - CONFIG.restWdth) < 5)
-							wdth = CONFIG.restWdth;
-						if (Math.abs(ital - CONFIG.restItal) < 1)
-							ital = CONFIG.restItal;
+						if (Math.abs(wght - CONFIG.restWght) < 5) wght = CONFIG.restWght;
+						if (Math.abs(wdth - CONFIG.restWdth) < 5) wdth = CONFIG.restWdth;
+						if (Math.abs(ital - CONFIG.restItal) < 1) ital = CONFIG.restItal;
 
 						if (wght !== previousState[idx]) {
 							el.style.setProperty("--wght", `${wght}`);

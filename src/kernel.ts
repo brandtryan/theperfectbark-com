@@ -11,7 +11,7 @@ import {
 	ifThen,
 	mix,
 	mul,
-	ret,
+	// ret,
 	sym,
 	vec3,
 } from "@thi.ng/shader-ast";
@@ -67,10 +67,7 @@ export const urgeReleaseKernel = defn(
 
 			// APPLY FORCE
 			// Note: u_force is a uniform you'll need to define
-			assign(
-				$x(current),
-				add($x(current), mul(abs(explosiveForce), u_force)),
-			),
+			assign($x(current), add($x(current), mul(abs(explosiveForce), u_force))),
 
 			// THE DECAY (Gravity back to rest)
 			// Note: restState and u_decay need to be defined
