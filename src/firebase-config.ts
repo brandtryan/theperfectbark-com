@@ -1,4 +1,3 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
@@ -14,7 +13,7 @@ const firebaseConfig = {
 	storageBucket: "theperfectbark-6fa05.firebasestorage.app",
 	messagingSenderId: "494274968719",
 	appId: "1:494274968719:web:2f5a6e1c917cbf378cc4fa",
-	measurementId: "G-0TGPJ8D0C0",
+	// measurementId: "G-0TGPJ8D0C0",
 };
 
 // Initialize Firebase

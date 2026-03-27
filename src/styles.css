@@ -107,7 +107,12 @@ body {
 		"cont" var(--cont);
 	overflow: visible;
 	vertical-align: top;
-	transform: translateZ(0);
+
+	/* The "Airdancer" Root and Amplified Shear */
+	transform-origin: bottom center;
+	transform: skewX(calc(var(--ital) * -2.5deg));
+	will-change: font-variation-settings, transform;
+
 	backface-visibility: hidden;
 }
 
@@ -138,19 +143,13 @@ body {
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
-/* Specific line positioning.
-	Since you know exactly which words are on which line,
-	you can even target lines specifically for "hanging" indents
-	or dialogue without affecting the rest of the grid.
-*/
 .line:nth-child(1) {
 	grid-row: 1;
 }
 .line:nth-child(2) {
 	grid-row: 2;
 }
-/* ... up to 20 ... */
-/* Hide scrollbar for a cleaner book feel */
+
 #app::-webkit-scrollbar {
 	display: none;
 }
