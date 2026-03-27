@@ -315,16 +315,15 @@ async function startApp() {
 				vel.y -= abs(explosiveForce) * u_violence * 4.0;
 			}
 
-			// --- THE INVISIBLE SDF COLLIDER ---
-			// Let's attach Inigo Quilez's Box SDF directly to your mouse pointer!
-			// This creates a perfect 20% x 8% rectangle of solid mathematical space.
-			float boxDist = sdBox(a_position - u_mouse, vec2(0.2, 0.08));
-			
+			// --- THE INVISIBLE BOX OBSTACLE ---
+			// Let's create an invisible 0.2x0.2 box in the center of the screen
+			// and apply a repelling force if the text physics try to enter it!
+			vec2 screenCenter = vec2(0.5, 0.5);
+			float boxDist = sdBox(a_position - screenCenter, vec2(0.2, 0.2));
 			if (boxDist < 0.0) {
-				// If a word falls inside the negative space of the SDF (inside the box),
-				// we apply a massive physical force to instantly crush it into the straight jacket!
-				force.x += 50000.0; // Instant weight swell
-				force.y -= 50000.0; // Instant width crush
+				// Repel strongly!
+				vec2 repelDir = normalize(a_position - screenCenter);
+				force += repelDir * 1000.0; 
 			}
 
 			// D. ACCELERATION & VELOCITY (Verlet Step)
