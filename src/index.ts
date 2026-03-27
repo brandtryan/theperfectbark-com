@@ -51,31 +51,30 @@ function removeLoginScreen() {
 	const container = document.getElementById("login-container");
 	if (container) container.remove();
 }
-
 async function startApp() {
-	console.log("Running Raw WebGL2 Compute Engine...");
+	console.log("Running Newtonian GPGPU Engine...");
 
-	// ==========================================
-	// 1. THE KNOBS (Tweakpane GUI State)
-	// ==========================================
 	const PARAMS = {
-		decay: 0.08,
-		violence: 450.0,
+		friction: 0.85,
+		stiffness: 120.0,
+		violence: 8.0,
 		physicalLimit: 60.0,
 		stormRadius: 0.45,
 		noiseScale: 3.5,
 		noiseSpeed: 0.8,
+		hurst: 0.25, // NEW: Roughness parameter
 	};
 
 	const pane = new Pane({ title: "Phenomenology Controls" });
-	pane.addBinding(PARAMS, "decay", { min: 0.01, max: 0.5, step: 0.01 });
-	pane.addBinding(PARAMS, "violence", { min: 50, max: 1000, label: "Urge Violence" });
+	pane.addBinding(PARAMS, "friction", { min: 0.5, max: 0.99, step: 0.01 });
+	pane.addBinding(PARAMS, "stiffness", { min: 10, max: 300, step: 1 });
+	pane.addBinding(PARAMS, "violence", { min: 1.0, max: 50.0 });
 	pane.addBinding(PARAMS, "physicalLimit", { min: 60, max: 140, label: "Straight Jacket" });
 	pane.addBinding(PARAMS, "stormRadius", { min: 0.1, max: 1.5 });
 	pane.addBinding(PARAMS, "noiseScale", { min: 1.0, max: 15.0 });
 	pane.addBinding(PARAMS, "noiseSpeed", { min: 0.1, max: 3.0 });
+	pane.addBinding(PARAMS, "hurst", { min: 0.01, max: 0.99, label: "Roughness (H)" }); // NEW
 
-	// PERFECT DEFAULTS
 	const CONFIG = {
 		restWght: 300.0,
 		restWdth: 100.0,
@@ -91,7 +90,6 @@ async function startApp() {
 	const vw = window.innerWidth;
 	const vh = window.innerHeight;
 
-	// GLOBAL MOUSE TRACKING FIX
 	let mouseClientX = vw / 2;
 	let mouseClientY = vh / 2;
 	window.addEventListener("mousemove", e => {
@@ -100,6 +98,7 @@ async function startApp() {
 	});
 
 	let WORD_COUNT: number = 0;
+	let appScrollY = 0;
 
 	const sortedPages = Object.keys(Content)
 		.filter(key => key.startsWith("page"))
@@ -116,16 +115,26 @@ async function startApp() {
 	const gl = canvas.getContext("webgl2")!;
 
 	if (!gl) throw new Error("WebGL2 not supported!");
-	if (!gl.getExtension("EXT_color_buffer_float")) {
-		console.error("EXT_color_buffer_float not supported! Falling back to WebGL 2 defaults.");
-	}
+	if (!gl.getExtension("EXT_color_buffer_float")) console.error("EXT_color_buffer_float not supported!");
 
 	//@ts-ignore
 	await document.fonts.ready;
-	$compile(book).mount(document.getElementById("app")!);
+	const appEl = document.getElementById("app")!;
+	$compile(book).mount(appEl);
+
+	appEl.addEventListener(
+		"scroll",
+		() => {
+			appScrollY = appEl.scrollTop;
+		},
+		{ passive: true },
+	);
 
 	const domNodes = Array.from(document.getElementsByClassName("word"));
 	WORD_COUNT = domNodes.length;
+
+	// Setting capacity allocates the exact backing Float32Arrays needed
+	// for STATE.vals and REST.vals to be perfectly contiguous.
 	ecs.setCapacity(WORD_COUNT);
 
 	const rootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize);
@@ -134,25 +143,23 @@ async function startApp() {
 	for (let i = 0; i < WORD_COUNT; i++) {
 		const el = domNodes[i] as HTMLElement;
 		const rect = el.getBoundingClientRect();
-
 		el.style.width = rect.width / rootFontSize + "rem";
 		el.style.height = rect.height / rootFontSize + "rem";
 		el.classList.add("frozen");
 
-		// GLOBAL COORDINATE FIX
 		const x = rect.left + rect.width * 0.5;
-		const y = rect.top + window.scrollY + rect.height * 0.5; // Absolute document position
+		const y = rect.top + appScrollY + rect.height * 0.5;
 		const norm_x = x / vw;
 		const norm_y = y / vh;
 
 		const parentPage = el.closest(".page");
 		const pIndex = parentPage ? parseInt(parentPage.getAttribute("data-page-index")!) : 0;
-
 		if (!wordsByPage[pIndex]) wordsByPage[pIndex] = [];
 		wordsByPage[pIndex].push(i);
 
 		const entity = ecs.defEntity([STATE, REST]);
-		STATE.set(entity, [CONFIG.restWght, CONFIG.restWdth, CONFIG.restItal, CONFIG.restCont]);
+		// Injecting 8 values: 4 for State, 4 for Velocity (starting at 0)
+		STATE.set(entity, [CONFIG.restWght, CONFIG.restWdth, CONFIG.restItal, CONFIG.restCont, 0, 0, 0, 0]);
 		REST.set(entity, [norm_x, norm_y]);
 	}
 
@@ -160,9 +167,7 @@ async function startApp() {
 	const observer = new IntersectionObserver(
 		entries => {
 			entries.forEach(entry => {
-				if (entry.isIntersecting) {
-					activePageIndex = parseInt(entry.target.getAttribute("data-page-index")!, 10);
-				}
+				if (entry.isIntersecting) activePageIndex = parseInt(entry.target.getAttribute("data-page-index")!, 10);
 			});
 		},
 		{ root: document.getElementById("app"), threshold: 0.5 },
@@ -170,22 +175,26 @@ async function startApp() {
 	document.querySelectorAll(".page").forEach(sec => observer.observe(sec));
 
 	// ==========================================
-	// THE RAW COMPUTE SHADER (Bypassing AST entirely)
+	// THE NEWTONIAN PHYSICS SHADER
 	// ==========================================
-
 	const vsSource = `#version 300 es
-		in vec4 a_particleData; // [wght, wdth, ital, urge]
-		in vec2 a_position;     // [x, y]
-		out vec4 v_newParticleData;
+		in vec4 a_state;      // [wght, wdth, ital, urge]
+		in vec4 a_velocity;   // [v_wght, v_wdth, v_ital, v_urge]
+		in vec2 a_position;   // [x, y]
+
+		out vec4 v_newState;
+		out vec4 v_newVelocity;
 
 		uniform float u_time;
 		uniform vec2 u_mouse;
-		uniform float u_decay;
+		uniform float u_friction;
+		uniform float u_stiffness;
 		uniform float u_violence;
 		uniform float u_physicalLimit;
 		uniform float u_stormRadius;
 		uniform float u_noiseScale;
 		uniform float u_noiseSpeed;
+		uniform float u_hurst; // NEW: The Hurst Exponent Uniform
 		uniform vec4 u_restState;
 
 		vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -236,110 +245,145 @@ async function startApp() {
 			return 105.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 		}
 
+		// --- NEW: FBM WITH ROUGH MATH (HURST) ---
 		float fbm(vec3 x) {
-			float v = 0.0;
-			float a = 0.5;
+			float v = 0.0; 
+			float a = 0.5; 
 			vec3 shift = vec3(100.0);
-			for (int i = 0; i < 3; ++i) {
-				v += a * snoise(x);
-				x = x * 2.0 + shift;
-				a *= 0.5;
+			for (int i = 0; i < 3; ++i) { 
+				v += a * snoise(x); 
+				x = x * 2.0 + shift; 
+				a *= pow(2.0, -u_hurst); // Amplitude scales by 2^-H
 			}
 			return v;
 		}
 
-		void main() {
-			vec4 current = a_particleData;
+		// --- NEW: INIGO QUILEZ GLSL SDF ---
+		// We can drop standard GLSL SDFs right in here!
+		float sdBox( in vec2 p, in vec2 b ) {
+			vec2 d = abs(p)-b;
+			return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+		}
 
-			// 1. SDF Mask (Absolute Global Document Hover)
-			float dist = distance(a_position, u_mouse);
+		void main() {
+			vec4 state = a_state;
+			vec4 vel = a_velocity;
+			float dt = 0.016; // 60fps time step
+
+			// 1. SDF Mask (THE LINEMAN FIX)
+			// By heavily penalizing the Y-distance (multiplying by 12.0), the circular storm 
+			// is squashed into a tight, horizontal "reading ruler" oval that cannot bleed 
+			// into the lines above and below the mouse.
+			vec2 stormVec = a_position - u_mouse;
+			stormVec.y *= 12.0; 
+			float dist = length(stormVec);
+			
 			float baseMask = 1.0 - smoothstep(0.0, u_stormRadius, dist);
 			float stormMask = pow(baseMask, 4.0);
 
-			// 2. The Storm Field
 			vec3 noiseCoords = vec3(a_position * u_noiseScale, u_time * u_noiseSpeed);
-			float turbulence = fbm(noiseCoords); 
+			float turbulence = fbm(noiseCoords); // Now using the Hurst parameter!
 
-			// 3. Accumulate "Urge" in the W-channel
-			current.w += stormMask * 1.5;
-			current.w = mix(current.w, 0.0, 0.01); // Fast dissipation
+			// 2. Accumulate "Urge"
+			state.w += stormMask * 1.5;
+			state.w = mix(state.w, 0.0, 0.01);
 
 			float explosiveForce = 0.0;
-			float isSnapping = 0.0;
-
-			// 4. THRESHOLD BREAK & EXHAUSTION
-			if (current.w > 35.0) {
-				explosiveForce = turbulence * current.w;
-				
-				// THE REFRACTORY PERIOD: Drop to negatives
-				current.w = -200.0; 
-				isSnapping = 1.0;
+			if (state.w > 35.0) {
+				explosiveForce = turbulence * state.w;
+				state.w = -200.0; // Refractory period
 			}
 
-			// A. WGHT (Swelling: 47 to 900)
-			float wghtTarget = u_restState.x + (max(current.w, 0.0) * 6.0) + (abs(explosiveForce) * u_violence);
-			if (isSnapping > 0.5) {
-				current.x = wghtTarget; // Instant visual impact
-			}
-			current.x = mix(current.x, wghtTarget, 0.15); 
-			current.x = clamp(current.x, 47.0, 900.0);
+			// ==========================================
+			// 3. NEWTONIAN KINETICS (F = ma)
+			// ==========================================
+			
+			// A. MASS (Inertia)
+			// Heavy words (900) have 3x the mass of light words (300).
+			float mass = clamp(state.x / u_restState.x, 0.5, 3.0);
 
-			// B. WDTH (Volume & Compression: 60 to 140)
-			float wdthTarget = u_restState.y;
-			if (isSnapping > 0.5) {
-				float crushForce = clamp(abs(explosiveForce) * (u_violence * 0.05), 0.0, 140.0 - u_physicalLimit);
-				wdthTarget = clamp(u_restState.y - crushForce, u_physicalLimit, 140.0);
-				current.y = wdthTarget; // Instant crush
-			}
-			current.y = mix(current.y, wdthTarget, 0.2);
-			current.y = clamp(current.y, 60.0, 140.0);
+			// B. DETERMINISTIC FORCES (Springs)
+			// Hooke's Law: F = -k * x. Pulls the morphology back to rest state.
+			vec2 force = vec2(
+				-u_stiffness * (state.x - u_restState.x), // Force on Weight
+				-u_stiffness * (state.y - u_restState.y)  // Force on Width
+			);
 
-			// C. ITAL (Shear Velocity: 0 to 12)
-			float italTarget = u_restState.z;
-			if (isSnapping > 0.5) {
-				italTarget = clamp(abs(explosiveForce) * 0.2, 0.0, 12.0);
-				current.z = italTarget; // Instant shear
-			}
-			current.z = mix(current.z, italTarget, 0.2);
-			current.z = clamp(current.z, 0.0, 12.0);
-
-			// 5. DECAY
-			// Skip decay logic on the exact frame it snaps so the impact lands at 100% force
-			if (isSnapping < 0.5) {
-				current.x = mix(current.x, u_restState.x, u_decay);
-				current.y = mix(current.y, u_restState.y, u_decay);
-				current.z = mix(current.z, u_restState.z, u_decay);
+			// C. STOCHASTIC FORCES (The Snap)
+			if (abs(explosiveForce) > 0.0) {
+				vel.x += abs(explosiveForce) * u_violence * 20.0; 
+				vel.y -= abs(explosiveForce) * u_violence * 4.0;
 			}
 
-			v_newParticleData = current;
+			// --- THE INVISIBLE SDF COLLIDER ---
+			// Let's attach Inigo Quilez's Box SDF directly to your mouse pointer!
+			// This creates a perfect 20% x 8% rectangle of solid mathematical space.
+			float boxDist = sdBox(a_position - u_mouse, vec2(0.2, 0.08));
+			
+			if (boxDist < 0.0) {
+				// If a word falls inside the negative space of the SDF (inside the box),
+				// we apply a massive physical force to instantly crush it into the straight jacket!
+				force.x += 50000.0; // Instant weight swell
+				force.y -= 50000.0; // Instant width crush
+			}
+
+			// D. ACCELERATION & VELOCITY (Verlet Step)
+			vec2 accel = force / mass;
+			vel.xy = (vel.xy + accel * dt) * u_friction;
+
+			// E. UPDATE STATE (Position)
+			state.xy += vel.xy * dt;
+
+			// F. THE STRAIGHT JACKET (Physical Bouncing)
+			// Instead of just clamping, hitting a wall causes a kinetic bounce!
+			if (state.x > 900.0) { state.x = 900.0; vel.x *= -0.5; }
+			if (state.x < 47.0)  { state.x = 47.0;  vel.x *= -0.5; }
+			
+			if (state.y > 140.0) { state.y = 140.0; vel.y *= -0.5; }
+			if (state.y < u_physicalLimit) { state.y = u_physicalLimit; vel.y *= -0.5; } // The straight jacket
+
+			// G. ITALIC AS SHEAR VELOCITY
+			// The shear (italic) is the visual manifestation of the kinetic velocity 
+			// of the width collapsing. This provides anticipation & follow-through!
+			float targetItal = clamp(abs(vel.y) * 0.15, 0.0, 12.0);
+			state.z = mix(state.z, targetItal, 0.3);
+
+			// OUTPUT TO MULTI-BUFFER
+			v_newState = state;
+			v_newVelocity = vel;
 		}
 	`;
 
 	const fsSource = `#version 300 es
-					precision mediump float; out vec4 fragColor; void main() { fragColor = vec4(0.0); }
-				`;
+		precision mediump float; out vec4 fragColor; void main() { fragColor = vec4(0.0); }
+	`;
 
 	function compileShader(type: any, source: any) {
 		const shader: WebGLShader = gl.createShader(type)!;
 		gl.shaderSource(shader, source);
 		gl.compileShader(shader);
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(shader));
 		return shader;
 	}
 	const glProgram = gl.createProgram()!;
 	gl.attachShader(glProgram, compileShader(gl.VERTEX_SHADER, vsSource));
 	gl.attachShader(glProgram, compileShader(gl.FRAGMENT_SHADER, fsSource));
-	gl.transformFeedbackVaryings(glProgram, ["v_newParticleData"], gl.SEPARATE_ATTRIBS);
+
+	// NEW: Writing two varying outputs simultaneously, interleaved to match our 8-float Stride
+	gl.transformFeedbackVaryings(glProgram, ["v_newState", "v_newVelocity"], gl.INTERLEAVED_ATTRIBS);
 	gl.linkProgram(glProgram);
 
 	const locs = {
 		time: gl.getUniformLocation(glProgram, "u_time"),
 		mouse: gl.getUniformLocation(glProgram, "u_mouse"),
-		decay: gl.getUniformLocation(glProgram, "u_decay"),
+		friction: gl.getUniformLocation(glProgram, "u_friction"),
+		stiffness: gl.getUniformLocation(glProgram, "u_stiffness"),
 		violence: gl.getUniformLocation(glProgram, "u_violence"),
 		physicalLimit: gl.getUniformLocation(glProgram, "u_physicalLimit"),
 		stormRadius: gl.getUniformLocation(glProgram, "u_stormRadius"),
 		noiseScale: gl.getUniformLocation(glProgram, "u_noiseScale"),
 		noiseSpeed: gl.getUniformLocation(glProgram, "u_noiseSpeed"),
+		hurst: gl.getUniformLocation(glProgram, "u_hurst"), // NEW
 		restState: gl.getUniformLocation(glProgram, "u_restState"),
 	};
 
@@ -355,27 +399,37 @@ async function startApp() {
 	gl.bindBuffer(gl.ARRAY_BUFFER, restBUFFER);
 	gl.bufferData(gl.ARRAY_BUFFER, REST.vals, gl.STATIC_DRAW);
 
-	const dataLocation = gl.getAttribLocation(glProgram, "a_particleData");
+	const stateLoc = gl.getAttribLocation(glProgram, "a_state");
+	const velLoc = gl.getAttribLocation(glProgram, "a_velocity");
 	const posLocation = gl.getAttribLocation(glProgram, "a_position");
 
-	const vaoA = gl.createVertexArray();
-	gl.bindVertexArray(vaoA);
-	gl.bindBuffer(gl.ARRAY_BUFFER, bufferA);
-	gl.enableVertexAttribArray(dataLocation);
-	gl.vertexAttribPointer(dataLocation, 4, gl.FLOAT, false, 0, 0);
-	gl.bindBuffer(gl.ARRAY_BUFFER, restBUFFER);
-	gl.enableVertexAttribArray(posLocation);
-	gl.vertexAttribPointer(posLocation, 2, gl.FLOAT, false, 0, 0);
+	const bindVAO = (buffer: WebGLBuffer) => {
+		const vao = gl.createVertexArray();
+		gl.bindVertexArray(vao);
+		gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
-	const vaoB = gl.createVertexArray();
-	gl.bindVertexArray(vaoB);
-	gl.bindBuffer(gl.ARRAY_BUFFER, bufferB);
-	gl.enableVertexAttribArray(dataLocation);
-	gl.vertexAttribPointer(dataLocation, 4, gl.FLOAT, false, 0, 0);
-	gl.bindBuffer(gl.ARRAY_BUFFER, restBUFFER);
-	gl.enableVertexAttribArray(posLocation);
-	gl.vertexAttribPointer(posLocation, 2, gl.FLOAT, false, 0, 0);
+		// State is at offset 0 (4 floats, 16 bytes) in the 32-byte stride
+		if (stateLoc >= 0) {
+			gl.enableVertexAttribArray(stateLoc);
+			gl.vertexAttribPointer(stateLoc, 4, gl.FLOAT, false, 32, 0);
+		}
 
+		// Velocity is at offset 16 (4 floats, 16 bytes) in the 32-byte stride
+		if (velLoc >= 0) {
+			gl.enableVertexAttribArray(velLoc);
+			gl.vertexAttribPointer(velLoc, 4, gl.FLOAT, false, 32, 16);
+		}
+
+		gl.bindBuffer(gl.ARRAY_BUFFER, restBUFFER);
+		if (posLocation >= 0) {
+			gl.enableVertexAttribArray(posLocation);
+			gl.vertexAttribPointer(posLocation, 2, gl.FLOAT, false, 0, 0);
+		}
+		return vao;
+	};
+
+	const vaoA = bindVAO(bufferA);
+	const vaoB = bindVAO(bufferB);
 	gl.bindVertexArray(null);
 	gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
@@ -386,7 +440,7 @@ async function startApp() {
 
 	let readIndex = 0;
 	let currentFence = null!;
-	const previousState = new Float32Array(WORD_COUNT * 4);
+	const previousState = new Float32Array(WORD_COUNT * 8); // Now size 8
 	let lastTime = performance.now();
 	let frameCount = 0;
 
@@ -431,19 +485,19 @@ async function startApp() {
 
 						gl.useProgram(glProgram);
 
-						// DYNAMIC MOUSE COORDINATE MATCHING
 						const globalMouseX = mouseClientX / vw;
-						const globalMouseY = (mouseClientY + window.scrollY) / vh;
+						const globalMouseY = (mouseClientY + appScrollY) / vh;
 
 						gl.uniform1f(locs.time, now * 0.001);
 						gl.uniform2f(locs.mouse, globalMouseX, globalMouseY);
-						gl.uniform1f(locs.decay, PARAMS.decay);
+						gl.uniform1f(locs.friction, PARAMS.friction);
+						gl.uniform1f(locs.stiffness, PARAMS.stiffness);
 						gl.uniform1f(locs.violence, PARAMS.violence);
 						gl.uniform1f(locs.physicalLimit, PARAMS.physicalLimit);
 						gl.uniform1f(locs.stormRadius, PARAMS.stormRadius);
 						gl.uniform1f(locs.noiseScale, PARAMS.noiseScale);
 						gl.uniform1f(locs.noiseSpeed, PARAMS.noiseSpeed);
-
+						gl.uniform1f(locs.hurst, PARAMS.hurst); // NEW
 						gl.uniform4f(
 							locs.restState,
 							CONFIG.restWght,
@@ -470,7 +524,7 @@ async function startApp() {
 						gl.bindBuffer(gl.COPY_READ_BUFFER, null);
 						gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
 
-						// @ts-ignore
+						//@ts-ignore
 						currentFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
 						gl.flush();
 						readIndex = writeIndex;
@@ -489,16 +543,26 @@ async function startApp() {
 
 						for (let j = 0; j < activeIndices.length; j++) {
 							const i = activeIndices[j];
-							const idx = i * 4;
+							const idx = i * 8; // NOW MULTIPLIED BY 8 (Stride)
 							const el = domNodes[i] as HTMLElement;
 
-							let wght = Math.round(ecsData[idx]);
-							let wdth = Math.round(ecsData[idx + 1]);
-							let ital = Number(ecsData[idx + 2].toFixed(2));
+							// --- OPTIMIZATION: AGGRESSIVE QUANTIZATION ---
+							// We step the values into larger chunks so the browser can cache the rasterized glyphs.
+							// This eliminates the 100% CPU spikes from infinite layout reflows!
 
-							if (Math.abs(wght - CONFIG.restWght) < 5) wght = CONFIG.restWght;
-							if (Math.abs(wdth - CONFIG.restWdth) < 2) wdth = CONFIG.restWdth;
-							if (Math.abs(ital - CONFIG.restItal) < 0.2) ital = CONFIG.restItal;
+							// wght jumps in chunks of 50
+							let wght = Math.round(ecsData[idx] / 50) * 50;
+
+							// wdth jumps in chunks of 5
+							let wdth = Math.round(ecsData[idx + 1] / 5) * 5;
+
+							// ital jumps in full integers
+							let ital = Math.round(ecsData[idx + 2]);
+
+							// Snaps to "Home" with widened deadzones to account for the stepping
+							if (Math.abs(wght - CONFIG.restWght) < 55) wght = CONFIG.restWght;
+							if (Math.abs(wdth - CONFIG.restWdth) < 6) wdth = CONFIG.restWdth;
+							if (Math.abs(ital - CONFIG.restItal) < 1.2) ital = CONFIG.restItal;
 
 							if (wght !== previousState[idx]) {
 								el.style.setProperty("--wght", `${wght}`);

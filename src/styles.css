@@ -54,7 +54,7 @@ body {
 	scroll-behavior: smooth;
 }
 
-#book {
+#pages {
 	max-width: 550px; /* Constrains the "responsive" width */
 	margin: 0 auto;
 	padding: 5vh 1rem;
@@ -111,7 +111,6 @@ body {
 	/* The "Airdancer" Root and Amplified Shear */
 	transform-origin: bottom center;
 	transform: skewX(calc(var(--ital) * -2.5deg));
-	will-change: font-variation-settings, transform;
 
 	backface-visibility: hidden;
 }
