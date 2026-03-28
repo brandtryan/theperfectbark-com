@@ -218,7 +218,7 @@ async function main() {
 
 	let activePageIndex = 0;
 	let pageStartTime = performance.now();
-	// let ghostY = 0.5;
+	let ghostY = 0.5;
 
 	const observer = new IntersectionObserver(
 		entries => {
@@ -236,12 +236,12 @@ async function main() {
 	);
 	document.querySelectorAll(".page").forEach(sec => observer.observe(sec));
 
-	// function updateGhostReader(now: number) {
-	// 	const elapsedSeconds = (now - pageStartTime) / 1000.0;
-	// 	const duration = pageDurations[activePageIndex] || 30.0;
-	// 	const pageProgress = Math.min(Math.max(elapsedSeconds / duration, 0), 1.0);
-	// 	ghostY = activePageIndex + pageProgress;
-	// }
+	function updateGhostReader(now: number) {
+		const elapsedSeconds = (now - pageStartTime) / 1000.0;
+		const duration = pageDurations[activePageIndex] || 30.0;
+		const pageProgress = Math.min(Math.max(elapsedSeconds / duration, 0), 1.0);
+		ghostY = activePageIndex + pageProgress;
+	}
 	// ==========================================
 	// THE NEWTONIAN PHYSICS SHADER (AST VERSION)
 	// ==========================================
@@ -668,7 +668,7 @@ async function main() {
 					const currentTime = performance.now();
 					frameCount++;
 					if (currentTime >= lastTime + 1000) {
-						fpsTextNode.nodeValue = `FPS: ${frameCount} | PAGE: ${activePageIndex} | GHOST: ghostY.toFixed(2)}`;
+						fpsTextNode.nodeValue = `FPS: ${frameCount} | PAGE: ${activePageIndex} | GHOST: ${ghostY.toFixed(2)}`;
 						frameCount = 0;
 						lastTime = currentTime;
 					}
@@ -695,14 +695,17 @@ async function main() {
 						const activeVAO = readIndex === 0 ? vaoA : vaoB;
 
 						gl.useProgram(glProgram);
-						// updateGhostReader(t);
+						updateGhostReader(t);
 
-						const globalMouseX = mouseClientX / vw;
+						const manualMouseX = mouseClientX / vw;
 						const manualMouseY = (mouseClientY + appScrollY) / appEl.clientHeight;
-						const activeStormY = PARAMS.useGhostReader ? manualMouseY : manualMouseY;
+						
+						// In Ghost Mode, center the storm horizontally (0.5) and use the calculated ghostY
+						const activeStormX = PARAMS.useGhostReader ? 0.5 : manualMouseX;
+						const activeStormY = PARAMS.useGhostReader ? ghostY : manualMouseY;
 
 						gl.uniform1f(locs.time, t * 0.001);
-						gl.uniform2f(locs.mouse, globalMouseX, activeStormY);
+						gl.uniform2f(locs.mouse, activeStormX, activeStormY);
 						gl.uniform1f(locs.friction, PARAMS.friction);
 						gl.uniform1f(locs.stiffness, PARAMS.stiffness);
 						gl.uniform1f(locs.violence, PARAMS.violence);
