@@ -57,9 +57,9 @@ async function main() {
 	console.log("Running Newtonian GPGPU Engine...");
 
 	const PARAMS = {
-		friction: 0.95,
-		stiffness: 40.0,
-		violence: 25.0,
+		friction: 0.85,
+		stiffness: 120.0,
+		violence: 12.0,
 		physicalLimit: 60.0,
 		stormRadius: 0.85,
 		noiseScale: 3.5,
@@ -71,12 +71,12 @@ async function main() {
 		circleY: 0.5,
 		circleRadius: 0.15,
 		repelStrength: 2000.0,
-		willpower: 0.15,
-		urgeRate: 300.0,
-		urgeDecay: 0.005,
-		snapThreshold: 10.0,
+		willpower: 0.25,
+		urgeRate: 150.0,
+		urgeDecay: 0.01,
+		snapThreshold: 25.0,
 		globalWindSpeed: 0.8,
-		struggleChance: 0.25,
+		struggleChance: 0.15,
 		sensitivityScale: 3.5,
 		sensitivitySpeed: 0.25,
 		sensitivityThreshold: 0.2,
@@ -216,42 +216,32 @@ async function main() {
 		pageDurations[parseInt(pIdx)] = (count / BASE_WPM) * 60.0 * 0.6;
 	});
 
-	let activePageIndex = -1;
+	let activePageIndex = 0;
 	let pageStartTime = performance.now();
-	let ghostY = 0.5;
+	// let ghostY = 0.5;
 
 	const observer = new IntersectionObserver(
 		entries => {
 			entries.forEach(entry => {
 				if (entry.isIntersecting) {
-					const rawIdx = entry.target.getAttribute("data-page-index");
-					const newIdx = rawIdx ? parseInt(rawIdx, 10) : 0;
-					if (!isNaN(newIdx) && newIdx !== activePageIndex) {
+					const newIdx = parseInt(entry.target.getAttribute("data-page-index")!, 10);
+					if (newIdx !== activePageIndex) {
 						activePageIndex = newIdx;
 						pageStartTime = performance.now();
-						console.log(
-							`PAGE SYNC: Resyncing Page ${activePageIndex} (${pageDurations[activePageIndex]?.toFixed(1)}s)`,
-						);
 					}
 				}
 			});
 		},
-		{ root: document.getElementById("app"), threshold: 0.2 },
+		{ root: document.getElementById("app"), threshold: 0.5 },
 	);
 	document.querySelectorAll(".page").forEach(sec => observer.observe(sec));
 
-	function updateGhostReader(now: number) {
-		if (activePageIndex < 0) {
-			ghostY = 0;
-			return;
-		}
-		const elapsedSeconds = (now - pageStartTime) / 1000.0;
-		const duration = pageDurations[activePageIndex] || 30.0;
-		const pageProgress = Math.min(Math.max(elapsedSeconds / duration, 0), 1.0);
-		ghostY = activePageIndex + pageProgress;
-		if (isNaN(ghostY)) ghostY = 0;
-	}
-
+	// function updateGhostReader(now: number) {
+	// 	const elapsedSeconds = (now - pageStartTime) / 1000.0;
+	// 	const duration = pageDurations[activePageIndex] || 30.0;
+	// 	const pageProgress = Math.min(Math.max(elapsedSeconds / duration, 0), 1.0);
+	// 	ghostY = activePageIndex + pageProgress;
+	// }
 	// ==========================================
 	// THE NEWTONIAN PHYSICS SHADER (AST VERSION)
 	// ==========================================
@@ -566,17 +556,11 @@ async function main() {
 		}),
 	]);
 
-	const vsSource = (glsl as any)(vsProgram).replace(
-		"#version 300 es",
-		"#version 300 es\nprecision highp float;",
-	);
+	const vsSource = (glsl as any)(vsProgram).replace("#version 300 es", "#version 300 es\nprecision highp float;");
 
 	const fragColor = output("vec4", "fragColor");
 	const fsProgram = program([fragColor, defMain(() => [assign(fragColor, vec4(0.0))])]);
-	const fsSource = (glsl as any)(fsProgram).replace(
-		"#version 300 es",
-		"#version 300 es\nprecision mediump float;",
-	);
+	const fsSource = (glsl as any)(fsProgram).replace("#version 300 es", "#version 300 es\nprecision mediump float;");
 
 	function compileShader(type: any, source: any) {
 		const shader: WebGLShader = gl.createShader(type)!;
@@ -678,13 +662,13 @@ async function main() {
 	initGraph(db, {
 		// 1. GPGPU Physics Compute Node
 		gpu: {
-			fn: (ins) =>
+			fn: ins =>
 				ins.raf.map((now: any) => {
 					const t = typeof now === "number" ? now : now.timestamp || performance.now();
 					const currentTime = performance.now();
 					frameCount++;
 					if (currentTime >= lastTime + 1000) {
-						fpsTextNode.nodeValue = `FPS: ${frameCount} | PAGE: ${activePageIndex} | GHOST: ${ghostY.toFixed(2)}`;
+						fpsTextNode.nodeValue = `FPS: ${frameCount} | PAGE: ${activePageIndex} | GHOST: ghostY.toFixed(2)}`;
 						frameCount = 0;
 						lastTime = currentTime;
 					}
@@ -711,11 +695,11 @@ async function main() {
 						const activeVAO = readIndex === 0 ? vaoA : vaoB;
 
 						gl.useProgram(glProgram);
-						updateGhostReader(t);
+						// updateGhostReader(t);
 
 						const globalMouseX = mouseClientX / vw;
 						const manualMouseY = (mouseClientY + appScrollY) / appEl.clientHeight;
-						const activeStormY = PARAMS.useGhostReader ? ghostY : manualMouseY;
+						const activeStormY = PARAMS.useGhostReader ? manualMouseY : manualMouseY;
 
 						gl.uniform1f(locs.time, t * 0.001);
 						gl.uniform2f(locs.mouse, globalMouseX, activeStormY);
