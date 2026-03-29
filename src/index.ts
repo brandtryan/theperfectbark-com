@@ -49,6 +49,7 @@ import {
 	$z,
 	$w,
 	$xy,
+	step,
 } from "@thi.ng/shader-ast";
 import { GLSLVersion, targetGLSL } from "@thi.ng/shader-ast-glsl";
 import { snoise3 } from "@thi.ng/shader-ast-stdlib";
@@ -57,35 +58,174 @@ async function main() {
 	console.log("Running Newtonian GPGPU Engine...");
 
 	const PARAMS = {
-		friction: 0.85,
-		stiffness: 120.0,
-		violence: 12.0,
+		friction: 0.95,
+		stiffness: 15.0,
+		violence: 100.0,
 		physicalLimit: 60.0,
 		stormRadius: 0.85,
 		noiseScale: 3.5,
 		noiseSpeed: 0.8,
 		hurst: 0.25,
-		flowStrength: 2500.0,
+		flowStrength: 5000.0,
 		flowScale: 2.0,
 		circleX: 0.5,
 		circleY: 0.5,
 		circleRadius: 0.15,
 		repelStrength: 2000.0,
-		willpower: 0.25,
-		urgeRate: 150.0,
-		urgeDecay: 0.01,
-		snapThreshold: 25.0,
-		globalWindSpeed: 0.8,
-		struggleChance: 0.15,
+		willpower: 0.05,
+		urgeRate: 1000.0,
+		urgeDecay: 0.002,
+		snapThreshold: 3.0,
+		globalWindSpeed: 1.5,
+		struggleChance: 0.45,
 		sensitivityScale: 3.5,
 		sensitivitySpeed: 0.25,
 		sensitivityThreshold: 0.2,
 		lineSqueeze: 20.0,
 		activeWordLimit: 0.55,
 		useGhostReader: true,
+		useWakeEffect: false,
 	};
 
 	const pane = new Pane({ title: "Phenomenology Controls" });
+
+	const PRESETS = {
+		Default: () => {
+			Object.assign(PARAMS, {
+				friction: 0.75, // Lower friction helps them stop faster
+				stiffness: 180.0,
+				violence: 45.21,
+				physicalLimit: 92.17,
+				noiseScale: 3.13,
+				noiseSpeed: 2.12,
+				hurst: 0.69,
+				flowStrength: 1470.0,
+				flowScale: 2.0,
+				globalWindSpeed: 0.8,
+				willpower: 0.1,
+				urgeRate: 47.83,
+				urgeDecay: 0.1, // High decay for instant stop
+				snapThreshold: 10.0,
+				struggleChance: 0.0,
+				sensitivityScale: 4.01,
+				sensitivitySpeed: 0.25,
+				sensitivityThreshold: 0.6,
+				activeWordLimit: 0.66,
+				useGhostReader: true,
+				useWakeEffect: false,
+				lineSqueeze: 100.0,
+				stormRadius: 0.15,
+				circleX: 0.5,
+				circleY: 0.5,
+				circleRadius: 0.07,
+				repelStrength: 2000.0,
+			});
+			pane.refresh();
+		},
+		IndyCar: () => {
+			Object.assign(PARAMS, {
+				friction: 0.82,
+				stiffness: 180.0,
+				violence: 45.21,
+				physicalLimit: 92.17,
+				noiseScale: 3.13,
+				noiseSpeed: 2.12,
+				hurst: 0.69,
+				flowStrength: 1470.0,
+				flowScale: 2.0,
+				globalWindSpeed: 0.8,
+				willpower: 0.1,
+				urgeRate: 47.83,
+				urgeDecay: 0.001,
+				snapThreshold: 10.0,
+				struggleChance: 0.0,
+				sensitivityScale: 4.01,
+				sensitivitySpeed: 0.25,
+				sensitivityThreshold: 0.6,
+				activeWordLimit: 0.66,
+				useGhostReader: true,
+				useWakeEffect: true,
+				lineSqueeze: 20.0,
+				stormRadius: 0.85,
+				circleX: 0.13,
+				circleY: 0.25,
+				circleRadius: 0.07,
+				repelStrength: 2000.0,
+			});
+			pane.refresh();
+		},
+		Bingo: () => {
+			Object.assign(PARAMS, {
+				friction: 0.98,
+				stiffness: 15.0,
+				violence: 60.0,
+				physicalLimit: 60.0,
+				stormRadius: 0.85,
+				noiseScale: 3.5,
+				noiseSpeed: 0.8,
+				hurst: 0.25,
+				flowStrength: 3500.0,
+				flowScale: 2.0,
+				circleX: 0.5,
+				circleY: 0.5,
+				circleRadius: 0.15,
+				repelStrength: 2000.0,
+				willpower: 0.1,
+				urgeRate: 600.0,
+				urgeDecay: 0.005,
+				snapThreshold: 5.0,
+				globalWindSpeed: 0.8,
+				struggleChance: 0.35,
+				sensitivityScale: 3.5,
+				sensitivitySpeed: 0.25,
+				sensitivityThreshold: 0.2,
+				lineSqueeze: 20.0,
+				activeWordLimit: 0.55,
+				useGhostReader: true,
+				useWakeEffect: true,
+			});
+			pane.refresh();
+		},
+		"ticcy-rikky-ray": () => {
+			Object.assign(PARAMS, {
+				friction: 0.67,
+				stiffness: 10.0,
+				violence: 50.0,
+				physicalLimit: 65.22,
+				noiseScale: 6.93,
+				noiseSpeed: 1.68,
+				hurst: 0.79,
+				flowStrength: 1090.0,
+				flowScale: 7.74,
+				globalWindSpeed: 0.22,
+				willpower: 0.05,
+				urgeRate: 1000.0,
+				urgeDecay: 0.016,
+				snapThreshold: 31.52,
+				struggleChance: 0.0,
+				sensitivityScale: 4.32,
+				sensitivitySpeed: 0.12,
+				sensitivityThreshold: 1.0,
+				activeWordLimit: 0.68,
+				useGhostReader: true,
+				useWakeEffect: true,
+				lineSqueeze: 20.0,
+				stormRadius: 0.86,
+				circleX: 0.18,
+				circleY: 0.15,
+				circleRadius: 0.24,
+				repelStrength: 2000.0,
+			});
+			pane.refresh();
+		},
+	};
+
+	const presetFolder = pane.addFolder({ title: "Presets" });
+	presetFolder.addButton({ title: "Load Default" }).on("click", PRESETS.Default);
+	presetFolder.addButton({ title: "Load IndyCar" }).on("click", PRESETS.IndyCar);
+	presetFolder.addButton({ title: "Load Bingo" }).on("click", PRESETS.Bingo);
+	presetFolder.addButton({ title: "Load Ticcy-Rikky-Ray" }).on("click", PRESETS["ticcy-rikky-ray"]);
+
 	pane.addBinding(PARAMS, "friction", { min: 0.5, max: 0.99, step: 0.01 });
 	pane.addBinding(PARAMS, "stiffness", { min: 10, max: 300, step: 1 });
 	pane.addBinding(PARAMS, "violence", { min: 1.0, max: 50.0 });
@@ -112,6 +252,7 @@ async function main() {
 
 	const stormFolder = pane.addFolder({ title: "The Storm Geometry" });
 	stormFolder.addBinding(PARAMS, "useGhostReader", { label: "Auto Reading Storm" });
+	stormFolder.addBinding(PARAMS, "useWakeEffect", { label: "Wake Effect (Behind)" });
 	stormFolder.addBinding(PARAMS, "lineSqueeze", { min: 10.0, max: 100.0, label: "Line Isolation" });
 	stormFolder.addBinding(PARAMS, "stormRadius", { min: 0.1, max: 1.5 });
 
@@ -132,6 +273,30 @@ async function main() {
 	tsUI.id = "troubleshooting-ui";
 	tsUI.innerText = "Booting Compute Engine...";
 	document.body.appendChild(tsUI);
+
+	// DRAG LOGIC FOR INFO BAR
+	let isUIDragging = false;
+	let uiOffsetX = 0;
+	let uiOffsetY = 0;
+
+	tsUI.addEventListener("mousedown", e => {
+		isUIDragging = true;
+		uiOffsetX = e.clientX - tsUI.offsetLeft;
+		uiOffsetY = e.clientY - tsUI.offsetTop;
+		tsUI.style.cursor = "grabbing";
+	});
+
+	window.addEventListener("mousemove", e => {
+		if (!isUIDragging) return;
+		tsUI.style.left = `${e.clientX - uiOffsetX}px`;
+		tsUI.style.top = `${e.clientY - uiOffsetY}px`;
+		tsUI.style.bottom = "auto";
+	});
+
+	window.addEventListener("mouseup", () => {
+		isUIDragging = false;
+		tsUI.style.cursor = "grab";
+	});
 
 	const vw = window.innerWidth;
 	const vh = window.innerHeight;
@@ -218,7 +383,7 @@ async function main() {
 
 	let activePageIndex = 0;
 	let pageStartTime = performance.now();
-	let ghostY = 0.5;
+	let ghostY = 0.0;
 
 	const observer = new IntersectionObserver(
 		entries => {
@@ -276,6 +441,7 @@ async function main() {
 	const u_sensitivityThreshold = uniform("float", "u_sensitivityThreshold");
 	const u_activeWordLimit = uniform("float", "u_activeWordLimit");
 	const u_lineSqueeze = uniform("float", "u_lineSqueeze");
+	const u_useWakeEffect = uniform("float", "u_useWakeEffect");
 	const u_circlePos = uniform("vec2", "u_circlePos");
 	const u_circleRadius = uniform("float", "u_circleRadius");
 	const u_repelStrength = uniform("float", "u_repelStrength");
@@ -342,6 +508,7 @@ async function main() {
 		u_sensitivityThreshold,
 		u_activeWordLimit,
 		u_lineSqueeze,
+		u_useWakeEffect,
 		u_circlePos,
 		u_circleRadius,
 		u_repelStrength,
@@ -367,7 +534,8 @@ async function main() {
 				...(() => {
 					const stormDist = sym(length(stormVec));
 					const baseMask = sym(sub(float(1.0), smoothstep(float(0.0), u_stormRadius, stormDist)));
-					const stormMask = sym(mul(pow(baseMask, float(4.0)), behindReader));
+					// Toggle between symmetric band (Line Backer) and directional wake
+					let stormMask = sym(mul(pow(baseMask, float(4.0)), mix(float(1.0), behindReader, u_useWakeEffect)));
 
 					// --- THE NEUROLOGICAL STORM (URGE) ---
 					const sensCoords = sym(vec3(mul(a_position, u_sensitivityScale), mul(u_time, u_sensitivitySpeed)));
@@ -389,6 +557,9 @@ async function main() {
 						stormDist,
 						baseMask,
 						stormMask,
+						// HARD CUTOFF: If interaction is symmetric (Line Lock mode), make it binary
+						// This prevents lingering 'low level' irritation from keeping multiple lines active
+						ifThen(lt(u_useWakeEffect, float(0.5)), [assign(stormMask, step(float(0.1), stormMask))]),
 						sensCoords,
 						noiseVal,
 						sensitivity,
@@ -476,7 +647,7 @@ async function main() {
 									const mass = sym(clamp(sdiv($x(state), $x(u_restState)), float(0.5), float(3.0)));
 									const force = sym(
 										vec2(
-											mul(neg(u_stiffness), sub($x(state), $x(u_restState))),
+											mul(neg(u_stiffness), sdiv(sub($x(state), $x(u_restState)), float(5.0))),
 											mul(neg(u_stiffness), sub($y(state), $y(u_restState))),
 										),
 									);
@@ -600,6 +771,7 @@ async function main() {
 		sensitivityThreshold: gl.getUniformLocation(glProgram, "u_sensitivityThreshold"),
 		activeWordLimit: gl.getUniformLocation(glProgram, "u_activeWordLimit"),
 		lineSqueeze: gl.getUniformLocation(glProgram, "u_lineSqueeze"),
+		useWakeEffect: gl.getUniformLocation(glProgram, "u_useWakeEffect"),
 		circlePos: gl.getUniformLocation(glProgram, "u_circlePos"),
 		circleRadius: gl.getUniformLocation(glProgram, "u_circleRadius"),
 		repelStrength: gl.getUniformLocation(glProgram, "u_repelStrength"),
@@ -668,7 +840,7 @@ async function main() {
 					const currentTime = performance.now();
 					frameCount++;
 					if (currentTime >= lastTime + 1000) {
-						fpsTextNode.nodeValue = `FPS: ${frameCount} | PAGE: ${activePageIndex} | GHOST: ${ghostY.toFixed(2)}`;
+						fpsTextNode.nodeValue = `FPS: ${frameCount} | ENTITIES: ${WORD_COUNT} | PAGE: ${activePageIndex} | GHOST: ${ghostY.toFixed(2)}`;
 						frameCount = 0;
 						lastTime = currentTime;
 					}
@@ -699,10 +871,18 @@ async function main() {
 
 						const manualMouseX = mouseClientX / vw;
 						const manualMouseY = (mouseClientY + appScrollY) / appEl.clientHeight;
-						
+
 						// In Ghost Mode, center the storm horizontally (0.5) and use the calculated ghostY
 						const activeStormX = PARAMS.useGhostReader ? 0.5 : manualMouseX;
-						const activeStormY = PARAMS.useGhostReader ? ghostY : manualMouseY;
+						let activeStormY = PARAMS.useGhostReader ? ghostY : manualMouseY;
+
+						// LINE LOCK: If wake effect is off, snap to the nearest line center (20 lines per page)
+						if (!PARAMS.useWakeEffect) {
+							const pageBase = Math.floor(activeStormY);
+							const localY = activeStormY - pageBase;
+							const snappedLocalY = (Math.floor(localY * 20.0) + 0.5) / 20.0;
+							activeStormY = pageBase + snappedLocalY;
+						}
 
 						gl.uniform1f(locs.time, t * 0.001);
 						gl.uniform2f(locs.mouse, activeStormX, activeStormY);
@@ -727,6 +907,7 @@ async function main() {
 						gl.uniform1f(locs.sensitivityThreshold, PARAMS.sensitivityThreshold);
 						gl.uniform1f(locs.activeWordLimit, PARAMS.activeWordLimit);
 						gl.uniform1f(locs.lineSqueeze, PARAMS.lineSqueeze);
+						gl.uniform1f(locs.useWakeEffect, PARAMS.useWakeEffect ? 1.0 : 0.0);
 						gl.uniform2f(locs.circlePos, PARAMS.circleX, PARAMS.circleY);
 						gl.uniform1f(locs.circleRadius, PARAMS.circleRadius);
 						gl.uniform1f(locs.repelStrength, PARAMS.repelStrength);
@@ -764,24 +945,41 @@ async function main() {
 			fn: ins =>
 				ins.gpu.map((state: Float32Array) => {
 					if (!state) return;
-					for (let i = 0; i < WORD_COUNT; i++) {
-						const idx = i * 8;
-						const wght = Math.round(state[idx] / 5) * 5;
-						const wdth = Math.round(state[idx + 1] / 2) * 2;
-						const ital = Math.round(state[idx + 2] * 10) / 10;
 
-						if (
-							wght !== previousState[idx] ||
-							wdth !== previousState[idx + 1] ||
-							ital !== previousState[idx + 2]
-						) {
-							const el = domNodes[i] as HTMLElement;
-							el.style.setProperty("--wght", `${wght}`);
-							el.style.setProperty("--wdth", `${wdth}`);
-							el.style.setProperty("--ital", `${ital}`);
-							previousState[idx] = wght;
-							previousState[idx + 1] = wdth;
-							previousState[idx + 2] = ital;
+					// VIEWPORT OPTIMIZATION: Only update words on active/neighboring pages
+					const pagesToUpdate = [activePageIndex - 1, activePageIndex, activePageIndex + 1];
+
+					for (const pIdx of pagesToUpdate) {
+						const wordIndices = wordsByPage[pIdx];
+						if (!wordIndices) continue;
+
+						for (const i of wordIndices) {
+							const idx = i * 8;
+							const rawWght = state[idx];
+							const rawWdth = state[idx + 1];
+							const rawItal = state[idx + 2];
+
+							// Stylistic Threshold Check: Bingo Visibility
+							// Weight delta > 10, Width delta > 8, Italics delta > 1.0
+							if (
+								Math.abs(rawWght - previousState[idx]) > 10 ||
+								Math.abs(rawWdth - previousState[idx + 1]) > 8 ||
+								Math.abs(rawItal - previousState[idx + 2]) > 1.0
+							) {
+								const wght = Math.round(rawWght / 5) * 5;
+								const wdth = Math.round(rawWdth / 2) * 2;
+								const ital = Math.round(rawItal * 10) / 10;
+
+								const el = domNodes[i] as HTMLElement;
+								el.style.setProperty("--wght", `${wght}`);
+								el.style.setProperty("--wdth", `${wdth}`);
+								el.style.setProperty("--ital", `${ital}`);
+
+								// Store raw values for next delta check
+								previousState[idx] = rawWght;
+								previousState[idx + 1] = rawWdth;
+								previousState[idx + 2] = rawItal;
+							}
 						}
 					}
 				}),
